@@ -1,30 +1,10 @@
-//resolver.js 
 const { ApolloError } = require('apollo-server');
-const Produit = require('./produit');
-const Client = require('./client');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
-const { sendProduitMessage } = require('./ProduitProducer'); 
-const { sendClientMessage } = require('./clientProducer'); 
 
-
-
-
-
-
-const produitProtoPath = './produit.proto';
+// Load Protobuf definitions for client and produit services
 const clientProtoPath = './client.proto';
-
-
-
-
-const produitProtoDefinition = protoLoader.loadSync(produitProtoPath, {
-  keepCase: true,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-});
+const produitProtoPath = './produit.proto';
 
 const clientProtoDefinition = protoLoader.loadSync(clientProtoPath, {
   keepCase: true,
@@ -34,154 +14,183 @@ const clientProtoDefinition = protoLoader.loadSync(clientProtoPath, {
   oneofs: true,
 });
 
-// Obtenir les services gRPC
-const produitProto = grpc.loadPackageDefinition(produitProtoDefinition).produit;
+const produitProtoDefinition = protoLoader.loadSync(produitProtoPath, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
+
 const clientProto = grpc.loadPackageDefinition(clientProtoDefinition).client;
+const produitProto = grpc.loadPackageDefinition(produitProtoDefinition).produit;
 
-
-
-const clientProduit = new produitProto.ProduitService(
-  'localhost:50054',
-  grpc.credentials.createInsecure()
-);
-
-const clientClient = new clientProto.ClientService(
-  'localhost:50055',
-  grpc.credentials.createInsecure()
-);
+// Initialize gRPC client connections
+const clientClient = new clientProto.ClientService('localhost:50057', grpc.credentials.createInsecure());
+const produitClient = new produitProto.ProduitService('localhost:50054', grpc.credentials.createInsecure());
 
 const resolvers = {
   Query: {
-    
     produit: async (_, { id }) => {
       try {
-        return await Produit.findById(id); 
+        const response = await new Promise((resolve, reject) => {
+          produitClient.getProduit({ produit_id: id }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error fetching produit from microservice'));
+            } else {
+              resolve(res.produit);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la recherche du produit: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error fetching produit: ${error.message}`, "INTERNAL_ERROR");
       }
     },
-    
     produits: async () => {
       try {
-        return await Produit.find(); 
+        const response = await new Promise((resolve, reject) => {
+          produitClient.searchProduits({}, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error searching produits from microservice'));
+            } else {
+              resolve(res.produits);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la recherche des produits: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error searching produits: ${error.message}`, "INTERNAL_ERROR");
       }
     },
     client: async (_, { id }) => {
       try {
-        return await Client.findById(id); 
+        const response = await new Promise((resolve, reject) => {
+          clientClient.getClient({ client_id: id }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error fetching client from microservice'));
+            } else {
+              resolve(res.client);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la recherche du client: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error fetching client: ${error.message}`, "INTERNAL_ERROR");
       }
     },
-  
     clients: async () => {
       try {
-        return await Client.find(); // Trouver tous les clients
+        const response = await new Promise((resolve, reject) => {
+          clientClient.searchClients({}, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error searching clients from microservice'));
+            } else {
+              resolve(res.clients);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la recherche des clients: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error searching clients: ${error.message}`, "INTERNAL_ERROR");
       }
     },
   },
   Mutation: {
-
     createClient: async (_, { nom, description }) => {
       try {
-        const nouveauClient = new Client({ nom, description });
-        const client = await nouveauClient.save(); // Sauvegarder le client
-        
-        // Envoyer un message Kafka pour l'événement de création de client
-        await sendClientMessage('creation', { id: client._id, nom, description });
-  
-        return client; // Retourner le client créé
+        const response = await new Promise((resolve, reject) => {
+          clientClient.createClient({ nom, description }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error creating client via microservice'));
+            } else {
+              resolve(res.client);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la création du client: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error creating client: ${error.message}`, "INTERNAL_ERROR");
       }
     },
-    
     deleteClient: async (_, { id }) => {
       try {
-        const client = await Client.findByIdAndDelete(id); // Supprimer par ID
-        if (!client) {
-          throw new ApolloError("Client non trouvé", "NOT_FOUND");
-        }
-    
-        // Envoyer un message Kafka pour l'événement de suppression de client
-        await sendClientMessage('suppression', { id });
-    
-        return "Client supprimé avec succès";
+        await new Promise((resolve, reject) => {
+          clientClient.deleteClient({ client_id: id }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error deleting client via microservice'));
+            } else {
+              resolve();
+            }
+          });
+        });
+        return "Client deleted successfully";
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la suppression du client: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error deleting client: ${error.message}`, "INTERNAL_ERROR");
       }
     },
-    
     updateClient: async (_, { id, nom, description }) => {
       try {
-        const client = await Client.findByIdAndUpdate(
-          id,
-          { nom, description },
-          { new: true } // Retourner le client mis à jour
-        );
-        
-        if (!client) {
-          throw new ApolloError("Client non trouvé", "NOT_FOUND");
-        }
-    
-        // Envoyer un message Kafka pour l'événement de modification de client
-        await sendClientMessage('modification', { id: client._id, nom, description });
-    
-        return client; // Client mis à jour
+        const response = await new Promise((resolve, reject) => {
+          clientClient.updateClient({ client_id: id, nom, description }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error updating client via microservice'));
+            } else {
+              resolve(res.client);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la mise à jour du client: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error updating client: ${error.message}`, "INTERNAL_ERROR");
       }
     },
     createProduit: async (_, { nom, description }) => {
       try {
-        const nouveauProduit = new Produit({ nom, description });
-        const produit = await nouveauProduit.save(); // Sauvegarder le client
-        
-        // Envoyer un message Kafka pour l'événement de création de client
-        await sendProduitMessage('creation', { id: produit._id, nom, description });
-  
-        return produit; // Retourner le client créé
+        const response = await new Promise((resolve, reject) => {
+          produitClient.createProduit({ nom, description }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error creating produit via microservice'));
+            } else {
+              resolve(res.produit);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la création du produit: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error creating produit: ${error.message}`, "INTERNAL_ERROR");
       }
     },
     deleteProduit: async (_, { id }) => {
       try {
-        const produit = await Produit.findByIdAndDelete(id); // Supprimer par ID
-        if (!produit) {
-          throw new ApolloError("Produit non trouvé", "NOT_FOUND");
-        }
-    
-        // Envoyer un message Kafka pour l'événement de suppression de client
-        await sendProduitMessage('suppression', { id });
-    
-        return "Produit supprimé avec succès";
+        await new Promise((resolve, reject) => {
+          produitClient.deleteProduit({ produit_id: id }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error deleting produit via microservice'));
+            } else {
+              resolve();
+            }
+          });
+        });
+        return "Produit deleted successfully";
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la suppression du Produit: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error deleting produit: ${error.message}`, "INTERNAL_ERROR");
       }
     },
     updateProduit: async (_, { id, nom, description }) => {
       try {
-        const produit = await Produit.findByIdAndUpdate(
-          id,
-          { nom, description },
-          { new: true } // Retourner le client mis à jour
-        );
-        
-        if (!produit) {
-          throw new ApolloError("Produit non trouvé", "NOT_FOUND");
-        }
-    
-        // Envoyer un message Kafka pour l'événement de modification de client
-        await sendProduitMessage('modification', { id: produit._id, nom, description });
-    
-        return produit; // produit mis à jour
+        const response = await new Promise((resolve, reject) => {
+          produitClient.updateProduit({ produit_id: id, nom, description }, (err, res) => {
+            if (err) {
+              reject(new ApolloError('Error updating produit via microservice'));
+            } else {
+              resolve(res.produit);
+            }
+          });
+        });
+        return response;
       } catch (error) {
-        throw new ApolloError(`Erreur lors de la mise à jour du produit: ${error.message}`, "INTERNAL_ERROR");
+        throw new ApolloError(`Error updating produit: ${error.message}`, "INTERNAL_ERROR");
       }
     },
   },
