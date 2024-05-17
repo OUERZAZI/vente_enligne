@@ -1,0 +1,65 @@
+
+//Le serveur devrait démarrer sur le port 4000 par défaut.
+
+//Tester les opérations CRUD
+//1. GET tous les clients
+//Pour récupérer tous les clients, envoyez la requête suivante à l'URL http://localhost:4000/
+
+query {
+  clients {
+    id
+    nom
+    description
+  }
+}
+//2. Créer un client
+//Pour créer un nouveau client, envoyez la requête suivante à l'URL http://localhost:4000/
+
+mutation {
+  createClient(nom: "Client4", description: "Description Client4") {
+    id
+    nom
+    description
+  }
+}
+//grpc 
+greate client
+{
+    "nom":"salma",
+    "description": "nouveau client"
+}
+
+
+
+get client:
+
+{
+  "client_id": "664723c53fdec9db6eb3d7a9"
+}
+
+
+update client : 
+
+{
+  "client_id": "664670cf28d8e44c5d68078a",
+  "nom": "slim",
+  "description": "zarrouk slim"
+}
+
+//3. Mettre à jour un client
+//Pour mettre à jour un client existant, envoyez la requête suivante à l'URL http://localhost:4000/
+
+mutation {
+  updateClient(id: "ID_DU_CLIENT_A_MODIFIER", nom: "Nouveau Nom", description: "Nouvelle Description") {
+    id
+    nom
+    description
+  }
+}
+
+//4. Supprimer un client
+//Pour supprimer un client, envoyez la requête suivante à l'URL http://localhost:4000/
+
+mutation {
+  deleteClient(id: "ID_DU_CLIENT_A_SUPPRIMER")    
+}
